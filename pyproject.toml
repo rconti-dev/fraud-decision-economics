@@ -1,0 +1,24 @@
+[project]
+name = "fraud-decision-economics"
+version = "0.1.0"
+description = "A three-way accept/authenticate/block card-fraud policy, optimised in dollars per thousand transactions"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "kagglehub>=0.3.6",
+    "duckdb>=1.1",
+    "pandas>=2.2",
+    "numpy>=2.0",
+    "lightgbm>=4.5",
+    "scikit-learn>=1.5",
+    "shap>=0.46",
+    "matplotlib>=3.9",
+    "pyyaml>=6.0",
+    "xlsxwriter>=3.2",
+]
+
+[dependency-groups]
+dev = ["ruff>=0.8", "jupyterlab>=4.3"]
+
+[tool.ruff]
+line-length = 100

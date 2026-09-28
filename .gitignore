@@ -1,0 +1,37 @@
+# macOS
+.DS_Store
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Editor and tool caches
+.vscode/
+.ruff_cache/
+.obsidian/
+
+# Virtual environments
+.venv
+
+
+# AI
+CLAUDE.md
+
+# Data and build artifacts, rebuilt by the pipeline, never committed. IEEE-CIS
+# competition rules restrict redistribution, so nothing derived from the dataset
+# itself is tracked. data/manifest.json is the exception: it records what was
+# fetched, without containing any of it.
+data/*
+!data/manifest.json
+*.duckdb
+*.duckdb.wal
+*.db
+models/
+
+# Outputs that are regenerated (figures and memo ARE committed)
+outputs/scratch/
+.ipynb_checkpoints/
