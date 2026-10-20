@@ -1,0 +1,7 @@
+# Single source of truth for every choice the pipeline makes.
+
+data:
+  competition: ieee-fraud-detection
+  # Only the labelled training files are used. The Kaggle test set has no
+  # released labels, so it cannot support a dollar-denominated evaluation.
+  files: [train_transaction.csv, train_identity.csv]
