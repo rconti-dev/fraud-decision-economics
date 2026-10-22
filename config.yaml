@@ -5,3 +5,17 @@ data:
   # Only the labelled training files are used. The Kaggle test set has no
   # released labels, so it cannot support a dollar-denominated evaluation.
   files: [train_transaction.csv, train_identity.csv]
+
+# Split boundaries are expressed in TransactionDT day-index, never row counts,
+# so they stay reproducible if the row ordering ever changes.
+
+split:
+  # TransactionDT is seconds from an UNKNOWN reference. Day index is
+  # TransactionDT // 86400, which is reference-free. Span is ~183 days.
+  train_days: [0, 131]      # [inclusive, exclusive)
+  # 21 days rather than 31, so that training ends ten days closer to eval_days.
+  calib_days: [131, 152]    # calibration of predicted probabilities
+  eval_days: [152, 183]     # policy evaluation, in dollars
+  # The last days of train_days are not fitted on: they only decide when to stop adding
+  # trees. Stopping on calib_set would tune the model to the rows it is calibrated on.
+  valid_days: 14
