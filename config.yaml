@@ -19,3 +19,16 @@ split:
   # The last days of train_days are not fitted on: they only decide when to stop adding
   # trees. Stopping on calib_set would tune the model to the rows it is calibrated on.
   valid_days: 14
+
+model:
+  seeds: [1, 2, 3, 4, 5]    # one booster each; their scores are averaged
+  objective: binary
+  learning_rate: 0.02
+  num_leaves: 64
+  min_data_in_leaf: 100
+  feature_fraction: 0.8
+  bagging_fraction: 0.8
+  bagging_freq: 1
+  num_boost_round: 10000
+  early_stopping_rounds: 500
+  calibration: isotonic     
