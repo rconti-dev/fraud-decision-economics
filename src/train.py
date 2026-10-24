@@ -4,6 +4,8 @@
 """
 
 import argparse
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -22,6 +24,7 @@ from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_s
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = yaml.safe_load((ROOT / "config.yaml").read_text())
 DB_PATH = ROOT / "data" / "raw" / "fraud.duckdb"
+MART_PATH = ROOT / "data" / "mart.duckdb"
 DATA = ROOT / "data"
 FIG = ROOT / "outputs" / "figures"
 
@@ -92,7 +95,7 @@ def reliability_plot(y, p_raw, p_cal) -> None:
     print("  figure -> outputs/figures/calibration.png")
 
 
-def random_split_check(con: duckdb.DuckDBPyConnection, chronological_ap: float) -> None:
+def random_split_check(con: duckdb.DuckDBPyConnection) -> float:
     _, X, y, day = frame(con, "training_table")
     cfg = CONFIG["split"]
     fit_hi = cfg["train_days"][1] - cfg["valid_days"]
@@ -106,11 +109,7 @@ def random_split_check(con: duckdb.DuckDBPyConnection, chronological_ap: float) 
     i_eval = rest[:n_eval]
 
     booster = fit(X.iloc[i_fit], y[i_fit], X.iloc[i_val], y[i_val], seed)
-    ap = average_precision_score(y[i_eval], booster.predict(X.iloc[i_eval]))
-    print(f"\nrandom split (diagnostic, {len(i_fit):,} fit / {len(i_eval):,} eval)")
-    print(f"  PR-AUC random        {ap:.4f}")
-    print(f"  PR-AUC chronological {chronological_ap:.4f}")
-    print(f"  inflation            {ap / chronological_ap - 1:+.1%}")
+    return average_precision_score(y[i_eval], booster.predict(X.iloc[i_eval]))
 
 
 def main() -> None:
@@ -127,6 +126,8 @@ def main() -> None:
     ).fetchone()[0]:
         raise SystemExit("split views not found; run src/split.py first")
 
+    run_at = datetime.now(UTC).replace(microsecond=0)
+    run_id = run_at.strftime("%Y%m%d-%H%M%S")
     cfg = CONFIG["split"]
     _, X_tr, y_tr, day_tr = frame(con, "train_set")
     cats = {c: t for c in X_tr.columns
@@ -142,7 +143,7 @@ def main() -> None:
         booster.save_model(str(DATA / f"model_{seed}.txt"), num_iteration=booster.best_iteration)
         print(f"  seed {seed}: {booster.best_iteration} rounds -> data/model_{seed}.txt")
         boosters.append(booster)
-    print(f"  {X_tr.shape[1]} features, {len(cats)} categorical")
+    n_features = X_tr.shape[1]
     del X_tr
 
     _, X_ca, y_ca, _ = frame(con, "calib_set", cats)
@@ -151,28 +152,32 @@ def main() -> None:
     raw_ev = np.mean([b.predict(X_ev) for b in boosters], axis=0)
     cal_ev = calibrator(raw_ca, y_ca)(raw_ev)
 
-    print(f"\nevaluation window, {len(y_ev):,} txn at {y_ev.mean():.2%} fraud")
-    print(f"  PR-AUC        {average_precision_score(y_ev, cal_ev):.4f}")
-    print(f"  ROC AUC       {roc_auc_score(y_ev, cal_ev):.4f}")
-    print(f"  Brier raw     {brier_score_loss(y_ev, raw_ev):.5f}")
-    print(f"  Brier isotonic {brier_score_loss(y_ev, cal_ev):.5f}")
-    print(f"  mean predicted {cal_ev.mean():.2%}, observed {y_ev.mean():.2%}")
     reliability_plot(y_ev, raw_ev, cal_ev)
 
-    gain = sum(pd.Series(b.feature_importance("gain"), index=b.feature_name()) for b in boosters)
-    print("\ntop features by gain")
-    for name, value in gain.sort_values(ascending=False).head(15).items():
-        print(f"  {name:<20} {value / gain.sum():.1%}")
-
-    preds = pd.DataFrame({"TransactionID": ids_ev, "p_fraud": cal_ev})
+    preds = pd.DataFrame({"TransactionID": ids_ev, "p_fraud": cal_ev, "run_id": run_id})
     con.register("preds_df", preds)
     con.execute("CREATE OR REPLACE TABLE predictions AS SELECT * FROM preds_df")
     con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_pred_id ON predictions (TransactionID)")
-    print(f"\npredictions: {len(preds):,} rows, eval_set only")
 
-    if args.random_split:
-        random_split_check(con, average_precision_score(y_ev, cal_ev))
+    pr_auc = average_precision_score(y_ev, cal_ev)
+    run = pd.DataFrame([{
+        "run_id": run_id, "run_at": run_at,
+        "seeds": CONFIG["model"]["seeds"], "rounds": [b.best_iteration for b in boosters],
+        "n_features": n_features,
+        "config": json.dumps({k: CONFIG[k] for k in ("split", "model")}),
+        "eval_n": len(y_ev), "pr_auc": pr_auc, "roc_auc": roc_auc_score(y_ev, cal_ev),
+        "brier_raw": brier_score_loss(y_ev, raw_ev),
+        "brier_calibrated": brier_score_loss(y_ev, cal_ev),
+        "mean_predicted": cal_ev.mean(), "observed_rate": y_ev.mean(),
+        "pr_auc_random_split": random_split_check(con) if args.random_split else None,
+    }])
+    con.execute(f"ATTACH IF NOT EXISTS '{MART_PATH}' AS mart")
+    con.execute((ROOT / "sql" / "mart.sql").read_text())
+    con.register("run_df", run)
+    con.execute("INSERT OR REPLACE INTO mart.model_runs BY NAME SELECT * FROM run_df")
     con.close()
+    print(f"\nrun {run_id}: PR-AUC {pr_auc:.4f} on {len(y_ev):,} txn "
+          f"-> data/mart.duckdb (model_runs)")
 
 
 if __name__ == "__main__":
