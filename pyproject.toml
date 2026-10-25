@@ -1,7 +1,7 @@
 [project]
 name = "fraud-decision-economics"
 version = "0.1.0"
-description = "A three-way accept/authenticate/block card-fraud policy, optimised in dollars per thousand transactions"
+description = "A card-fraud decline threshold for a payment provider's portfolio, set against Visa's VAMP ratio"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -18,7 +18,11 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.8", "jupyterlab>=4.3"]
+dev = [
+    "ruff>=0.8",
+    "jupyterlab>=4.3",
+    "pytest>=9.1",
+]
 
 [tool.ruff]
 line-length = 100
