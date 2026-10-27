@@ -7,18 +7,15 @@ email domains, and identity rows for about a quarter of transactions.
 
 The assertions are about leakage and join integrity, the two ways this layer can be
 wrong and still look plausible downstream.
-
-    uv run python tests/test_sql_layer.py
 """
 
 import csv
 import random
-import sys
-import tempfile
 from pathlib import Path
 from string import Template
 
 import duckdb
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SQL = ROOT / "sql"
@@ -75,34 +72,16 @@ def build(con: duckdb.DuckDBPyConnection, tx: Path, idf: Path) -> None:
         con.execute((SQL / step).read_text())
 
 
-def main() -> int:
-    with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td)
-        tx, idf = write_fixture(tmp)
-        con = duckdb.connect(str(tmp / "test.duckdb"))
-        build(con, tx, idf)
-
-        checks = con.execute((ROOT / "tests" / "sql_layer_checks.sql").read_text()).fetchall()
-
-        cov = con.execute(
-            "SELECT avg(CAST(has_identity AS INTEGER)) FROM training_table"
-        ).fetchone()[0]
-        con.close()
-
-        failed = 0
-        for _, label, violations in checks:
-            ok = violations == 0
-            failed += not ok
-            print(f"  [{'PASS' if ok else 'FAIL'}] {label}"
-                  + ("" if ok else f"  ({violations} violations)"))
-        print(f"  [INFO] identity coverage in fixture: {cov:.0%}")
-        print("\n" + ("all checks passed" if not failed else f"{failed} check(s) FAILED"))
-        return 1 if failed else 0
+@pytest.fixture(scope="module")
+def checks(tmp_path_factory) -> list[tuple]:
+    tmp = tmp_path_factory.mktemp("sql_layer")
+    con = duckdb.connect(str(tmp / "test.duckdb"))
+    build(con, *write_fixture(tmp))
+    rows = con.execute((ROOT / "tests" / "sql_layer_checks.sql").read_text()).fetchall()
+    con.close()
+    return rows
 
 
-def test_sql_layer() -> None:
-    assert main() == 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def test_sql_layer_checks(checks) -> None:
+    failed = [f"{label} ({violations} violations)" for _, label, violations in checks if violations]
+    assert not failed, "; ".join(failed)
