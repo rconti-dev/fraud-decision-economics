@@ -23,7 +23,6 @@ CREATE TABLE IF NOT EXISTS mart.policy_thresholds (
     run_id VARCHAR,
     cap_name VARCHAR,
     cap DOUBLE,
-    is_headline BOOLEAN,
     binds_predicted BOOLEAN,
     threshold DOUBLE,
     approved_share DOUBLE,
@@ -31,6 +30,7 @@ CREATE TABLE IF NOT EXISTS mart.policy_thresholds (
     fraud_ratio DOUBLE,
     expected_ratio DOUBLE,
     fraud_value_share DOUBLE,
+    scenario VARCHAR,
     take_rate DOUBLE,
     revenue DOUBLE,
     vamp_events INTEGER,
@@ -38,5 +38,5 @@ CREATE TABLE IF NOT EXISTS mart.policy_thresholds (
     net_revenue DOUBLE,
     forgone DOUBLE,
     built_at TIMESTAMPTZ,
-    PRIMARY KEY (run_id, cap_name)
+    PRIMARY KEY (run_id, cap_name, scenario)
 );

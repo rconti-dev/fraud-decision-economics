@@ -1,14 +1,15 @@
 -- The highest threshold under each VAMP cap, priced as the mart stores it. Expects `caps`
--- (cap_name, cap, is_headline, binds_predicted, fee_per_event), policy_curve and predictions;
--- $take_rate is bound by policy.py.
+-- (cap_name, cap, binds_predicted, fee_per_event), `take_rates` (scenario,
+-- take_rate), policy_curve and predictions. Each cap is priced once per take-rate scenario.
 -- The fraud ratio is not monotone in the threshold, so this keeps the last threshold under the
 -- cap, not the first one over it. Approved legitimate value only grows as the threshold rises,
--- so the last one under the cap is also the best paid.
+-- so the last one under the cap earns the most revenue; net of fees only while every step
+-- inside the fee band brings more than fee / take_rate of legitimate value per fraud.
 
 CREATE OR REPLACE TEMP TABLE policy_thresholds AS
 WITH everything AS (SELECT * FROM policy_curve WHERE threshold = 'inf'::DOUBLE),
 chosen AS (
-    SELECT k.cap_name, k.cap, k.is_headline, k.binds_predicted, c.*
+    SELECT k.cap_name, k.cap, k.binds_predicted, c.*
     FROM caps k JOIN policy_curve c
       ON c.fraud_ratio <= k.cap AND (NOT k.binds_predicted OR c.expected_ratio <= k.cap)
     QUALIFY row_number() OVER (PARTITION BY k.cap_name ORDER BY c.threshold DESC) = 1
@@ -20,16 +21,16 @@ priced AS (
     FROM chosen c
 )
 SELECT (SELECT any_value(run_id) FROM predictions) AS run_id,
-       c.cap_name, c.cap, c.is_headline, c.binds_predicted, c.threshold,
+       c.cap_name, c.cap, c.binds_predicted, c.threshold,
        c.approved / e.approved AS approved_share,
        (c.legit_value + c.fraud_value) / (e.legit_value + e.fraud_value) AS value_share,
        c.fraud_ratio, c.expected_ratio,
        c.fraud_value / e.fraud_value AS fraud_value_share,
-       $take_rate::DOUBLE AS take_rate,
-       $take_rate::DOUBLE * c.legit_value AS revenue,
+       s.scenario, s.take_rate,
+       s.take_rate * c.legit_value AS revenue,
        c.frauds::INTEGER AS vamp_events, c.vamp_fees,
-       $take_rate::DOUBLE * c.legit_value - c.vamp_fees AS net_revenue,
-       $take_rate::DOUBLE * (e.legit_value - c.legit_value) AS forgone,
+       s.take_rate * c.legit_value - c.vamp_fees AS net_revenue,
+       s.take_rate * (e.legit_value - c.legit_value) AS forgone,
        now() AS built_at
-FROM priced c CROSS JOIN everything e
-ORDER BY c.cap;
+FROM priced c CROSS JOIN everything e CROSS JOIN take_rates s
+ORDER BY c.cap, s.take_rate;

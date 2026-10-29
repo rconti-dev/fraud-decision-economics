@@ -31,4 +31,23 @@ model:
   bagging_freq: 1
   num_boost_round: 10000
   early_stopping_rounds: 500
-  calibration: isotonic     
+
+# Every value below has a row in assumptions.md; the two files change together.
+economics:
+  # PSP net revenue per approved legitimate dollar, net of interchange and scheme fees,
+  # under each pricing model. The threshold never depends on it; only the dollars do.
+  take_rates:
+    interchange_plus: 0.00167   # Adyen, Q2 2025: enterprise merchants
+    blended: 0.0036             # Stripe, 2025: flat-rate SMB and mid-market merchants
+  # Visa VAMP ratio caps: (fraud reports + disputes) / settled card-not-present transactions.
+  # The data is a pool of merchants, so the acquirer caps apply to the whole of it.
+  vamp_caps:
+    acquirer_above_standard: 0.005
+    acquirer_excessive: 0.007
+  # Caps the predicted ratio must meet as well: it is the only one a PSP sees before
+  # chargebacks arrive, and above 0.7% it would be reading Excessive all month.
+  predicted_ratio_caps: [acquirer_excessive]
+  # Visa fee per counted event once the realised ratio is over each cap.
+  vamp_fee_per_event:
+    acquirer_above_standard: 4
+    acquirer_excessive: 8
