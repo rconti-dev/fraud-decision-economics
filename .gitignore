@@ -32,6 +32,4 @@ data/*
 *.db
 models/
 
-# Outputs that are regenerated (figures and memo ARE committed)
-outputs/scratch/
 .ipynb_checkpoints/

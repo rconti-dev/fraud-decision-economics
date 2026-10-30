@@ -10,14 +10,9 @@ from pathlib import Path
 
 import duckdb
 import lightgbm as lgb
-import matplotlib
 import numpy as np
 import pandas as pd
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import yaml
-from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 
@@ -26,7 +21,6 @@ CONFIG = yaml.safe_load((ROOT / "config.yaml").read_text())
 DB_PATH = ROOT / "data" / "raw" / "fraud.duckdb"
 MART_PATH = ROOT / "data" / "mart.duckdb"
 DATA = ROOT / "data"
-FIG = ROOT / "outputs" / "figures"
 
 # Columns the model must not learn from. TransactionDT and day_index are just the date: a model
 # that learned "fraud was high in week 10" would be useless next month. uid identifies the
@@ -76,23 +70,6 @@ def fit(X_fit, y_fit, X_val, y_val, seed: int) -> lgb.Booster:
 
 def calibrator(p_raw: np.ndarray, y: np.ndarray):
     return IsotonicRegression(out_of_bounds="clip").fit(p_raw, y).predict
-
-
-def reliability_plot(y, p_raw, p_cal) -> None:
-    fig, ax = plt.subplots(figsize=(4.8, 4.8))
-    ax.plot([0, 0.6], [0, 0.6], lw=1, ls="--", color="#999")
-    for p, name, colour in [(p_raw, "raw score", "#777"), (p_cal, "calibrated", "#c1440e")]:
-        obs, pred = calibration_curve(y, p, n_bins=20, strategy="quantile")
-        ax.plot(pred, obs, "o-", ms=3, lw=1.2, color=colour, label=name)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel("predicted fraud probability")
-    ax.set_ylabel("observed fraud rate")
-    ax.set_title("Reliability, evaluation window", fontsize=10)
-    ax.legend(fontsize=8, frameon=False)
-    fig.tight_layout()
-    fig.savefig(FIG / "calibration.png", dpi=150)
-    print("  figure -> outputs/figures/calibration.png")
 
 
 def random_split_check(con: duckdb.DuckDBPyConnection) -> float:
@@ -151,8 +128,6 @@ def main() -> None:
     raw_ca = np.mean([b.predict(X_ca) for b in boosters], axis=0)
     raw_ev = np.mean([b.predict(X_ev) for b in boosters], axis=0)
     cal_ev = calibrator(raw_ca, y_ca)(raw_ev)
-
-    reliability_plot(y_ev, raw_ev, cal_ev)
 
     preds = pd.DataFrame({"TransactionID": ids_ev, "p_fraud": cal_ev, "run_id": run_id})
     con.register("preds_df", preds)

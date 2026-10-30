@@ -1,5 +1,6 @@
--- The steps inside each fee band that add fraud, and the take rate below which each would lose
--- money. Read-only, on policy_curve and mart.policy_thresholds; run by results.ipynb.
+-- Each threshold step inside a fee band that approves at least one more fraud: the frauds and
+-- legitimate value it adds, and min_take_rate, the take rate below which its VAMP fees outweigh
+-- its revenue. 
 
 WITH run AS (
     SELECT t.* FROM mart.policy_thresholds t
@@ -20,4 +21,6 @@ band AS (
 SELECT cap, threshold, extra_frauds, extra_legit_value,
        extra_legit_value / extra_frauds AS legit_per_fraud,
        fee * extra_frauds / extra_legit_value AS min_take_rate
+-- lag() is NULL on a band's first row, so the step into the band is left out: it switches the
+-- fee on for every approved fraud, not only the new ones.
 FROM band WHERE extra_frauds > 0 ORDER BY cap, threshold

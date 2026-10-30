@@ -1,4 +1,5 @@
--- Realised outcome of every candidate threshold. See README.md in this directory.
+-- What approving p < t lets through, for every candidate threshold t: counts, 
+-- transaction volumes in dollars and the realised and predicted fraud ratios.
 
 CREATE OR REPLACE TABLE policy_curve AS
 WITH scored AS (
